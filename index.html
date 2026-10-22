@@ -3,14 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
 <title>NEO HUNTERS</title>
 <style>
-html,body{margin:0;height:100%;background:#000;display:flex;align-items:center;justify-content:center}
-canvas{width:min(100vw,calc(100vh*16/9));width:min(100vw,calc(100dvh*16/9));aspect-ratio:16/9;background:#0a0a1a;display:block}
+html,body{margin:0;height:100%;background:#000;overflow:hidden;overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+#stage{position:fixed;left:0;top:0;overflow:hidden;background:#000;transform-origin:0 0}
+#c{position:absolute;display:block;background:#0a0a1a;touch-action:none}
+#ui{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+.tb{position:absolute;display:flex;align-items:center;justify-content:center;box-sizing:border-box;color:#fff;font-family:sans-serif;font-weight:bold;text-align:center;line-height:1;pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none;white-space:nowrap}
+.btn{border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.36)}
+.btn.on{background:rgba(255,255,255,.4);transform:scale(.93)}
+.kz{border-color:rgba(120,190,255,.7)}.kx{border-color:rgba(130,255,150,.7)}.kc{border-color:rgba(255,130,130,.75)}.kv{border-color:rgba(255,224,120,.7)}.ka{border-color:rgba(200,160,255,.7)}.kf{border-color:rgba(120,240,255,.8)}
+.kinfo,.kmenu{background:rgba(0,0,0,.4);border-width:1.5px}
+.act{border-radius:50%;background:rgba(0,0,0,.42);border:1.5px solid rgba(255,255,255,.32)}
+.act.on{background:rgba(120,190,255,.55)}
+.act.off{text-decoration:line-through;color:#f88}
+.pad{border-radius:24px;background:none;border:none}
+#stage.p{background:linear-gradient(#05051a,#141846 55%,#05051a)}
+.pa{position:absolute;display:flex;align-items:center;justify-content:center;box-sizing:border-box;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.34);pointer-events:none}
+.pa.on{background:rgba(255,255,255,.45)}
+.tip{position:absolute;left:50%;transform:translateX(-50%);padding:8px 14px;border-radius:18px;background:rgba(20,30,70,.92);border:1px solid #8cf;color:#fff;font:bold 13px sans-serif;pointer-events:none;white-space:nowrap}
 </style>
 </head>
 <body>
-<canvas id="c" width="480" height="270"></canvas>
+<div id="stage"><canvas id="c" width="480" height="270"></canvas><div id="ui"></div></div>
 <script>
 var cv = document.getElementById('c');
 var ctx = cv ? cv.getContext('2d') : null;
@@ -22,10 +40,11 @@ var bullets = [], ebul = [], enemies = [], parts = [], trail = [], bub = [];
 var selHero = [{}, {}];
 var hb = {x: 0, y: 0, w: 0, h: 0};
 var hx = 0, hy = 0, hf = 1, hg = false;
-var AC = null, muted = false;
+var AC = null, muted = false, toneN = 0;
 
 function tone(f0, f1, d, w, v) {
-  if (muted || !AC || VOL <= 0) return;
+  if (muted || !AC || VOL <= 0 || toneN >= 12) return;
+  toneN++;
   var o = AC.createOscillator(), g = AC.createGain(), n = AC.currentTime;
   o.type = w;
   o.frequency.setValueAtTime(f0, n);
@@ -34,6 +53,7 @@ function tone(f0, f1, d, w, v) {
   g.gain.exponentialRampToValueAtTime(0.001, n + d);
   o.connect(g);
   g.connect(AC.destination);
+  o.onended = function () { toneN--; };
   o.start(n);
   o.stop(n + d);
 }
@@ -108,7 +128,7 @@ function applyUpg() {
 function newGame(i, a) {
   ch = mkChar(i, a || 0);
   upg = [false, false, false, false];
-  lives = 3;
+  lives = 5;
   cleared = [];
   ht = [];
   wp = [];
@@ -134,22 +154,46 @@ function respawn() {
   state = 'ready';
 }
 
+var HC = null, HX = null;
+
+function heroSil(p, c) {
+  var ox = p.x, oy = p.y, mc = ctx;
+  if (!HC) {
+    HC = document.createElement('canvas');
+    HX = HC.getContext('2d');
+  }
+  if (HC.width !== 64 * SC) {
+    HC.width = 64 * SC;
+    HC.height = 56 * SC;
+  }
+  HX.setTransform(SC, 0, 0, SC, 0, 0);
+  HX.clearRect(0, 0, 64, 56);
+  p.x = 24;
+  p.y = 14;
+  ctx = HX;
+  hgc = '#10131f';
+  drawHero(p, c, true);
+  ctx = mc;
+  p.x = ox;
+  p.y = oy;
+}
+
 function drawHeroO(p, c) {
   if (!p || !c) return;
   if (p.inv > 0 && p.hurt <= 0 && Math.floor(t / 3) % 2 === 0) return;
-  var ox = p.x, oy = p.y, sp = p.spin > 0;
+  var ox = p.x, oy = p.y, sp = p.spin > 0, bx = Math.floor(ox) - 24, by = Math.floor(oy) - 14;
   if (sp) {
     ctx.save();
     ctx.translate(Math.floor(ox + 6), Math.floor(oy + 10));
     ctx.rotate((1 - p.spin / 20) * Math.PI * 2 * p.face);
     ctx.translate(-Math.floor(ox + 6), -Math.floor(oy + 10));
   }
-  hgc = '#10131f';
-  p.x = ox - 1; drawHero(p, c, true);
-  p.x = ox + 1; drawHero(p, c, true);
-  p.x = ox; p.y = oy - 1; drawHero(p, c, true);
-  p.y = oy + 1; drawHero(p, c, true);
-  p.y = oy;
+  heroSil(p, c);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(HC, bx - 1, by, 64, 56);
+  ctx.drawImage(HC, bx + 1, by, 64, 56);
+  ctx.drawImage(HC, bx, by - 1, 64, 56);
+  ctx.drawImage(HC, bx, by + 1, 64, 56);
   hgc = '#7cf';
   drawHero(p, c);
   if (sp) ctx.restore();
@@ -214,7 +258,7 @@ function drawHUD() {
     ctx.fillStyle = upg[i] ? '#ffe36b' : '#333';
     if (ch && ch.type === 'shot') ctx.fillRect(42 + i * 8, 26, 6, 6);
   }
-  drawText('ENTER 정보   ESC 메뉴', W - 6, H - 5, 8, '#778', 'right');
+  if (!TCH) drawText('ENTER 정보   ESC 메뉴', W - 6, H - 5, 8, '#778', 'right');
   if (ch.nova) {
     var nr = p.novaCD > 0 ? 1 - p.novaCD / (p.novaMax || 200) : 1;
     drawText('F', 42, 72, 9, nr >= 1 ? '#6fe8ff' : '#778');
@@ -259,7 +303,7 @@ function drawStageSel() {
     ctx.strokeRect(cx, cy, 104, 74);
     (function (k) { reg(cx, cy, 104, 74, function () { if (stSel === k) pressed.Enter = true; else stSel = k; }); })(n);
   }
-  drawText('←→↑↓ 선택   ENTER 출격   E 파츠 장착   ESC 메인 화면', W / 2 - 40, 258, 10, '#889', 'center');
+  drawText(hint('←→↑↓ 선택   ENTER 출격   E 파츠 장착   ESC 메인 화면', '스테이지를 탭하세요 (한 번 더 탭하면 출격)'), W / 2 - 40, 258, 10, '#889', 'center');
   ctx.fillStyle = 'rgba(80,140,255,0.25)'; ctx.fillRect(W - 108, H - 34, 100, 26); ctx.strokeStyle = '#8cf'; ctx.lineWidth = 1; ctx.strokeRect(W - 108, H - 34, 100, 26);
   drawText('파츠 장착 [E]', W - 58, H - 17, 11, '#cfe', 'center');
   reg(W - 108, H - 34, 100, 26, function () { pressed.KeyE = true; });
@@ -312,10 +356,10 @@ function toggleEquip(i) {
   tone(700, 1000, 0.08, 'square', 0.06);
 }
 function reg(x, y, w, h, fn) { HIT.push({x: x, y: y, w: w, h: h, fn: fn}); }
-function tapAt(x, y) {
+function tapAt(x, y, out) {
   for (var i = HIT.length - 1; i >= 0; i--) {
     var r = HIT[i];
-    if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) { r.fn(); return true; }
+    if (out ? (r.w >= W && r.h >= H) : (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h)) { r.fn(); return true; }
   }
   return false;
 }
@@ -415,10 +459,10 @@ function dropItem(e) {
   }
   var r = Math.random() * (hasP(1) ? 0.7 : 1), wneed = false, wi2;
   for (wi2 = 0; wi2 < 8; wi2++) if (wp[wi2] && we[wi2] < 16) wneed = true;
-  if (r < 0.06) items.push({x: e.x, y: e.y, vy: -2, type: 1, l: 600, w: 10, h: 10});
-  else if (r < 0.24) items.push({x: e.x, y: e.y, vy: -2, type: 0, l: 600, w: 6, h: 6});
-  else if (wneed && r < 0.36) items.push({x: e.x, y: e.y, vy: -2, type: 2, l: 600, w: 6, h: 6});
-  else if (wneed && r < 0.40) items.push({x: e.x, y: e.y, vy: -2, type: 3, l: 600, w: 10, h: 10});
+  if (r < 0.10) items.push({x: e.x, y: e.y, vy: -2, type: 1, l: 600, w: 10, h: 10});
+  else if (r < 0.34) items.push({x: e.x, y: e.y, vy: -2, type: 0, l: 600, w: 6, h: 6});
+  else if (wneed && r < 0.46) items.push({x: e.x, y: e.y, vy: -2, type: 2, l: 600, w: 6, h: 6});
+  else if (wneed && r < 0.50) items.push({x: e.x, y: e.y, vy: -2, type: 3, l: 600, w: 10, h: 10});
 }
 
 function updateItems() {
@@ -457,18 +501,18 @@ function updateZones() {
     if (!rect(p, z)) continue;
     if (z.k === 0) p.slow = true;
     else if (z.k === 1) hurtPlayer(2, z.x);
-    else if (z.k === 4) hurtPlayer(3, z.x);
-    else if (z.k === 2 && (t + z.off) % 180 > 120) hurtPlayer(3, z.x);
+    else if (z.k === 4) hurtPlayer(2, z.x);
+    else if (z.k === 2 && (t + z.off) % 180 > 120) hurtPlayer(2, z.x);
     else if (z.k === 3 && t % 40 === 0 && p.inv <= 0) { p.hp -= (ch.defM || 1); burst(p.x + 6, p.y + 10, '#9f5', 3); }
     else if (z.k === 5 && p.vy >= 0 && p.hurt <= 0) { p.vy = -9.5; p.ground = false; p.kick = 0; p.dashT = 0; p.dj = false; burst(p.x + 6, p.y + 20, '#fff', 6, 3); tone(300, 1100, 0.2, 'square', 0.08); }
     else if (z.k === 6 && p.ground) moveX(p, z.dir * 0.9);
-    else if (z.k === 7) hurtPlayer(3, z.x);
+    else if (z.k === 7) hurtPlayer(2, z.x);
   }
   if (ST.gm === 2 || ST.gm === 8) {
     c = t % 170;
     if (c === 0) stx = p.x + (Math.random() - 0.5) * 160;
     if (c === 50) { shake = 8; tone(100, 30, 0.3, 'sawtooth', 0.12); }
-    if (c >= 50 && c < 58 && Math.abs(p.x + 6 - stx) < 10) hurtPlayer(3, stx);
+    if (c >= 50 && c < 58 && Math.abs(p.x + 6 - stx) < 10) hurtPlayer(2, stx);
   }
   if ((ST.gm === 7 || ST.gm === 8) && t % 90 === 0) ebul.push({x: p.x + (Math.random() - 0.5) * 120, y: camY, w: 4, h: 10, vx: 0, vy: 3});
 }
@@ -608,8 +652,8 @@ function drawClear() {
   if (ct > 60 && ST) drawText(ST.n, W / 2, 104, 13, '#ccc', 'center');
   if (ct > 80) drawText('TIME  ' + Math.floor(pt / 3600) + ':' + ('0' + (Math.floor(pt / 60) % 60)).slice(-2), W / 2, 130, 14, '#fff', 'center');
   if (ct > 100 && stageIdx < 8) drawText('WEAPON GET : ' + WN[stageIdx], W / 2, 156, 14, WC[stageIdx], 'center');
-  if (ct > 120) drawText('HEART ' + htCount() + '/8' + (ch && ch.type === 'shot' ? '     PARTS ' + (upg[0] + upg[1] + upg[2] + upg[3]) + '/4' : ''), W / 2, 182, 12, '#ffe36b', 'center');
-  if (ct > 150 && Math.floor(ct / 20) % 2 === 0) drawText('ENTER', W / 2, 220, 12, '#fff', 'center');
+  if (ct > 120) drawText('HEART ' + htCount() + '/9' + (ch && ch.type === 'shot' ? '     PARTS ' + (upg[0] + upg[1] + upg[2] + upg[3]) + '/4' : ''), W / 2, 182, 12, '#ffe36b', 'center');
+  if (ct > 150 && Math.floor(ct / 20) % 2 === 0) drawText(hint('ENTER', 'TAP'), W / 2, 220, 12, '#fff', 'center');
 }
 
 function drawEnding() {
@@ -620,25 +664,29 @@ function drawEnding() {
     ctx.fillStyle = (i + Math.floor(t / 15)) % 5 === 0 ? '#fff' : '#557';
     ctx.fillRect((i * 97) % W, (((i * 53 - ct * 0.3) % H) + H) % H, 1, 1);
   }
-  L = ['CONGRATULATIONS!', '', 'NEO HUNTERS', '', '모든 스테이지를 클리어했습니다', '', 'PLAYER  ' + (ch ? ch.name : ''), 'HEART ' + htCount() + '/8', 'PARTS ' + (upg[0] + upg[1] + upg[2] + upg[3]) + '/4', '', 'THANK YOU FOR PLAYING'];
+  L = ['CONGRATULATIONS!', '', 'NEO HUNTERS', '', '모든 스테이지를 클리어했습니다', '', 'PLAYER  ' + (ch ? ch.name : ''), 'HEART ' + htCount() + '/9', 'PARTS ' + (upg[0] + upg[1] + upg[2] + upg[3]) + '/4', '', 'THANK YOU FOR PLAYING'];
   for (i = 0; i < L.length; i++) {
     y = H + 20 + i * 26 - ct * 0.7;
     if (y > -20 && y < H + 20) drawText(L[i], W / 2, y, i === 0 ? 24 : 13, i === 0 ? '#ff0' : '#fff', 'center');
   }
-  if (ct > 120 && Math.floor(ct / 20) % 2 === 0) drawText('ENTER', W - 20, H - 12, 11, '#aaa', 'right');
+  if (ct > 120 && Math.floor(ct / 20) % 2 === 0) drawText(hint('ENTER', 'TAP'), W - 20, H - 12, 11, '#aaa', 'right');
 }
 
+var DIF = 1, cla = 0, hurtFl = 0, lowT = 0;
+var DIFN = ['쉬움', '보통', '어려움'], DIFC = ['#6f6', '#ff0', '#f66'];
 var pm = 0, SC = 2, warnT = 0, tm = 0, om = 0, rb = -1, VOL = 0.8, OVR = {}, KM = {};
 var LOG = ['KeyZ', 'KeyX', 'KeyC', 'KeyA'], LN = ['대시', '점프', '공격', '무기전환'];
 
 function resize() {
-  if (!cv || !ctx || !cv.getBoundingClientRect) return;
-  var r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
-  SC = Math.max(2, Math.min(6, Math.round(r.width * dpr / W)));
+  if (!cv || !ctx) return;
+  layout();
+  var dpr = window.devicePixelRatio || 1;
+  SC = Math.max(2, Math.min(TCH ? 4 : 6, Math.round(CWD * dpr / W)));
   if (cv.width !== W * SC) {
     cv.width = W * SC;
     cv.height = H * SC;
   }
+  needDraw = true;
 }
 
 function buildKM() {
@@ -649,7 +697,7 @@ function buildKM() {
 }
 
 function saveOpt() {
-  try { localStorage.setItem('nh_opt', JSON.stringify({v: VOL, m: muted, o: OVR})); } catch (e) {}
+  try { localStorage.setItem('nh_opt', JSON.stringify({v: VOL, m: muted, o: OVR, d: DIF})); } catch (e) {}
 }
 
 function loadOpt() {
@@ -659,6 +707,7 @@ function loadOpt() {
       VOL = typeof d.v === 'number' ? d.v : 0.8;
       muted = !!d.m;
       OVR = d.o || {};
+      DIF = d.d === 0 || d.d === 2 ? d.d : 1;
     }
   } catch (e) {}
   buildKM();
@@ -726,11 +775,11 @@ function drawTitle() {
     drawTextO((tm === i ? '▶ ' : '   ') + M[i], W / 2, 180 + i * 24, 16, tm === i ? '#ff0' : '#ccc', 'center');
     (function (k) { reg(W / 2 - 70, 180 + k * 24 - 18, 140, 24, function () { if (tm === k) pressed.Enter = true; else tm = k; }); })(i);
   }
-  drawText('↑↓ 선택   ENTER 확인', W / 2, 262, 10, '#889', 'center');
+  drawText(hint('↑↓ 선택   ENTER 확인', '메뉴를 탭하세요'), W / 2, 262, 10, '#889', 'center');
 }
 
 function drawOption() {
-  var i, y, v, R = ['볼륨', '소리', LN[0], LN[1], LN[2], LN[3], '키 기본값', '돌아가기'];
+  var i, y, v, yi, R = ['볼륨', '소리', LN[0], LN[1], LN[2], LN[3], '키 기본값', '난이도', '돌아가기'];
   ctx.fillStyle = '#080a1e';
   ctx.fillRect(0, 0, W, H);
   for (i = 0; i < 40; i++) {
@@ -738,8 +787,10 @@ function drawOption() {
     ctx.fillRect((i * 97) % W, (i * 53) % H, 1, 1);
   }
   drawTextO('OPTION', W / 2, 44, 22, '#8cf', 'center');
-  for (i = 0; i < 8; i++) {
-    y = 80 + i * 21;
+  for (i = 0, yi = 0; i < 9; i++) {
+    if (TCH && i > 1 && i < 7) continue;
+    y = 80 + yi * 21;
+    yi++;
     if (om === i) {
       ctx.fillStyle = 'rgba(255,255,255,0.12)';
       ctx.fillRect(90, y - 14, 300, 19);
@@ -753,10 +804,12 @@ function drawOption() {
         ctx.fillRect(250 + v * 10, y - 9, 8, 10);
       }
     } else if (i === 1) drawText(muted ? 'OFF' : 'ON', 250, y, 12, muted ? '#f66' : '#6f6');
+    else if (i === 7) drawText('◀ ' + DIFN[DIF] + ' ▶', 250, y, 12, DIFC[DIF]);
     else if (i >= 2 && i <= 5) drawText(rb === i - 2 ? '키를 누르세요...' : codeName(OVR[LOG[i - 2]] || LOG[i - 2]), 250, y, 12, rb === i - 2 ? '#ff0' : '#fff');
   }
-  drawText('←→ 볼륨   ENTER 선택   BACKSPACE 뒤로', W / 2, 262, 10, '#889', 'center');
+  drawText(hint('←→ 볼륨   ENTER 선택   BACKSPACE 뒤로', '볼륨 막대를 탭하세요'), W / 2, 262, 10, '#889', 'center');
   reg(8, 8, 70, 26, function () { pressed.Backspace = true; });
+  if (rb >= 0) reg(0, 0, W, H, function () { rb = -1; });
   drawText('◀ 뒤로', 14, 26, 12, '#8cf');
 }
 
@@ -1105,64 +1158,413 @@ function drawNpc() {
   if (player && Math.abs(player.x - n.x) < 280 && Math.floor(t / 14) % 2 === 0) drawText('HELP!', x + 9, y - 12, 10, '#ff5', 'center');
 }
 
-function makeTouch() {
-  var st = document.createElement('style');
-  var u = Math.max(52, Math.min(80, Math.floor(Math.min(window.innerWidth, window.innerHeight) * 0.17))), b = 16, g = 8, i;
-  st.textContent = 'html,body{touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none}.tb{position:fixed;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,255,255,.16);border:2px solid rgba(255,255,255,.35);color:#fff;font:bold 13px sans-serif;touch-action:none;user-select:none;-webkit-user-select:none;z-index:9}.tb.on{background:rgba(255,255,255,.42)}#rot{position:fixed;left:0;top:0;right:0;bottom:0;background:#000;color:#fff;font:bold 18px sans-serif;display:none;align-items:center;justify-content:center;z-index:99;text-align:center}';
-  document.head.appendChild(st);
-  var B = [
-    ['ArrowLeft', '◀', 'left:' + b + 'px;bottom:' + b + 'px;', u],
-    ['ArrowRight', '▶', 'left:' + (b + u + g) + 'px;bottom:' + b + 'px;', u],
-    ['ArrowUp', '▲', 'left:' + (b + (u + g) / 2) + 'px;bottom:' + (b + u + g) + 'px;', u],
-    ['KeyZ', 'DASH', 'right:' + (b + 2 * u + 2 * g) + 'px;bottom:' + b + 'px;', u],
-    ['KeyX', 'JUMP', 'right:' + (b + u + g) + 'px;bottom:' + (b + u * 0.8) + 'px;', u],
-    ['KeyC', 'ATK', 'right:' + b + 'px;bottom:' + (b + u * 0.3) + 'px;', Math.floor(u * 1.15)],
-    ['KeyV', 'SP', 'right:' + (b + Math.floor(u * 0.2)) + 'px;bottom:' + (b + u * 1.5 + g) + 'px;', Math.floor(u * 0.7)],
-    ['KeyF', 'GA', 'right:' + (b + 2 * u + 2 * g) + 'px;bottom:' + (b + u * 1.5) + 'px;', Math.floor(u * 0.7)],
-    ['KeyA', 'WPN','right:' + (b + u + g) + 'px;bottom:' + (b + u * 1.9) + 'px;', Math.floor(u * 0.7)],
-    ['Enter', 'INFO', 'right:' + b + 'px;top:12px;', Math.floor(u * 0.8)],
-    ['Escape', 'MENU', 'right:' + (b + Math.floor(u * 0.8) + 10) + 'px;top:12px;', Math.floor(u * 0.8)],
-    ['Backspace', '←', 'left:12px;top:12px;', Math.floor(u * 0.6)]
-  ];
-  for (i = 0; i < B.length; i++) {
-    var el = document.createElement('div');
-    el.className = 'tb';
-    el.textContent = B[i][1];
-    el.style.cssText = B[i][2] + 'width:' + B[i][3] + 'px;height:' + B[i][3] + 'px;';
-    TB = TB || {};
-    TB[B[i][0]] = el;
-    (function (c, node) {
-      node.addEventListener('touchstart', function (ev) {
-        ev.preventDefault();
-        node.classList.add('on');
-        if (navigator.vibrate) navigator.vibrate(8);
-        setKey(c, true);
-      });
-      node.addEventListener('touchend', function (ev) { ev.preventDefault(); node.classList.remove('on'); setKey(c, false); });
-      node.addEventListener('touchcancel', function () { node.classList.remove('on'); setKey(c, false); });
-    })(B[i][0], el);
-    document.body.appendChild(el);
+var TCH = false, ROT = false, ROTU = false, stageEl = null, uiEl = null, probeEl = null, LM = 'off';
+var CL = 0, CT = 0, CWD = 480, CHT = 270, SWD = 480, SHT = 270, TU = 60, TMODE = '', TKEY = '', lastMute = null;
+var CTL = [], TCT = {}, PTR = {}, PX0 = 0, PY0 = 0, INS = [0, 0, 0, 0], needDraw = true, holdP = false;
+var TKN = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyA', 'KeyF', 'Enter', 'Escape', 'Backspace'];
+var TKI = {ArrowLeft: 0, ArrowRight: 1, ArrowUp: 2, ArrowDown: 3, KeyZ: 4, KeyX: 5, KeyC: 6, KeyV: 7, KeyA: 8, KeyF: 9, Enter: 10, Escape: 11, Backspace: 12};
+var TWANT = new Uint8Array(13), TDOWN = new Uint8Array(13);
+
+function hint(a, b) { return TCH ? b : a; }
+
+function stopEv(e) { e.stopPropagation(); }
+
+function actClick(e) {
+  e.stopPropagation();
+  var c = this._c;
+  if (c.fn) c.fn();
+}
+
+function ptrXY(e) {
+  if (ROT) { PX0 = window.innerHeight - e.clientY; PY0 = e.clientX; }
+  else { PX0 = e.clientX; PY0 = e.clientY; }
+}
+
+function padMask(c) {
+  var dx = PX0 - c.x - c.w / 2, dy = PY0 - c.y - c.h / 2, ax, ay, th = TU * 0.18;
+  if (TMODE === 'menu') {
+    ax = Math.abs(dx);
+    ay = Math.abs(dy);
+    if (ax < TU * 0.35 && ay < TU * 0.35) return 0;
+    if (ax >= ay) return dx < 0 ? 1 : 2;
+    return dy < 0 ? 4 : 8;
   }
-  if (document.documentElement.requestFullscreen) {
-    var fs = document.createElement('div');
-    fs.className = 'tb';
-    fs.textContent = '⛶';
-    fs.style.cssText = 'left:' + (20 + Math.floor(u * 0.6)) + 'px;top:12px;width:' + Math.floor(u * 0.6) + 'px;height:' + Math.floor(u * 0.6) + 'px;';
-    fs.addEventListener('touchstart', function (ev) {
-      ev.preventDefault();
-      if (document.fullscreenElement) document.exitFullscreen();
-      else document.documentElement.requestFullscreen();
-    });
-    document.body.appendChild(fs);
+  if (dx < -th) return 1;
+  if (dx > th) return 2;
+  return 0;
+}
+
+function inCtl(c, x, y, k) {
+  var r = c.w * 0.5 * k, dx = x - c.x - c.w * 0.5, dy = y - c.y - c.h * 0.5;
+  return dx * dx + dy * dy <= r * r;
+}
+
+function ctlAt(x, y, k) {
+  var i, c, dx, dy, d, r, best = null, bd = 1e9;
+  for (i = 0; i < CTL.length; i++) {
+    c = CTL[i];
+    if (!c.vis || c.kind !== 'btn') continue;
+    r = c.w * 0.5 * k;
+    dx = x - c.x - c.w * 0.5;
+    dy = y - c.y - c.h * 0.5;
+    d = dx * dx + dy * dy;
+    if (d <= r * r && d < bd) { bd = d; best = c; }
   }
-  var rot = document.createElement('div');
-  rot.id = 'rot';
-  rot.textContent = '화면을 가로로 돌려 주세요 ↻';
-  document.body.appendChild(rot);
-  var chk = function () { rot.style.display = window.innerHeight > window.innerWidth ? 'flex' : 'none'; };
-  window.addEventListener('resize', chk);
-  window.addEventListener('orientationchange', chk);
-  chk();
+  return best;
+}
+
+function paintCtl(c) {
+  var on, i;
+  if (c.kind === 'pad') {
+    for (i = 0; i < 4; i++) {
+      on = TWANT[i] === 1 && c.vis;
+      if (c.ard[i] !== on) { c.ard[i] = on; c.ar[i].classList.toggle('on', on); }
+    }
+    return;
+  }
+  if (c.kind !== 'btn') return;
+  on = TWANT[c.ki] === 1;
+  if (c.on !== on) { c.on = on; c.el.classList.toggle('on', on); }
+}
+
+function touchSync() {
+  var i, k, p, c, m;
+  TWANT.fill(0);
+  for (k in PTR) {
+    p = PTR[k];
+    c = p.c;
+    if (!c) continue;
+    if (c.kind === 'pad') {
+      m = p.m;
+      if (m & 1) TWANT[0] = 1;
+      if (m & 2) TWANT[1] = 1;
+      if (m & 4) TWANT[2] = 1;
+      if (m & 8) TWANT[3] = 1;
+    } else TWANT[c.ki] = 1;
+  }
+  for (i = 0; i < 13; i++) {
+    if (TWANT[i] === TDOWN[i]) continue;
+    TDOWN[i] = TWANT[i];
+    setKey(TKN[i], TWANT[i] === 1);
+    if (TWANT[i] === 1 && i > 3 && navigator.vibrate) navigator.vibrate(8);
+  }
+  for (i = 0; i < CTL.length; i++) paintCtl(CTL[i]);
+}
+
+function releaseAll() {
+  PTR = {};
+  touchSync();
+}
+
+function ctlDown(e) {
+  var c = this._c;
+  e.stopPropagation();
+  if (e.cancelable) e.preventDefault();
+  if (!c.vis) return;
+  try { this.setPointerCapture(e.pointerId); } catch (er) {}
+  ptrXY(e);
+  PTR[e.pointerId] = {c: c, m: c.kind === 'pad' ? padMask(c) : 0};
+  touchSync();
+}
+
+function ctlMove(e) {
+  var r = PTR[e.pointerId], c, m;
+  if (!r) return;
+  ptrXY(e);
+  c = r.c;
+  if (c && c.kind === 'pad') {
+    m = padMask(c);
+    if (m !== r.m) { r.m = m; touchSync(); }
+    return;
+  }
+  if (c && inCtl(c, PX0, PY0, 1.5)) return;
+  c = ctlAt(PX0, PY0, 1.05);
+  if (c !== r.c) { r.c = c; touchSync(); }
+}
+
+function ctlUp(e) {
+  if (!PTR[e.pointerId]) return;
+  delete PTR[e.pointerId];
+  touchSync();
+}
+
+function mkCtl(id, label, code, kind) {
+  var el = document.createElement('div'), c = {id: id, ki: code ? TKI[code] : -1, kind: kind, el: el, x: 0, y: 0, w: 0, h: 0, vis: false, on: false, fn: null, ar: null, ard: null};
+  el.className = 'tb ' + kind + ' k' + id;
+  el.textContent = label;
+  el.style.display = 'none';
+  el._c = c;
+  if (kind === 'act') {
+    el.addEventListener('click', actClick);
+    el.addEventListener('pointerdown', stopEv);
+  } else {
+    el.addEventListener('pointerdown', ctlDown);
+    el.addEventListener('pointermove', ctlMove);
+    el.addEventListener('pointerup', ctlUp);
+    el.addEventListener('pointercancel', ctlUp);
+    el.addEventListener('lostpointercapture', ctlUp);
+  }
+  uiEl.appendChild(el);
+  TCT[id] = c;
+  CTL.push(c);
+  return c;
+}
+
+function toggleFs() {
+  var d = document, el = d.documentElement, p;
+  if (d.fullscreenElement) p = d.exitFullscreen();
+  else if (el.requestFullscreen) p = el.requestFullscreen();
+  if (p && p.catch) p.catch(function () {});
+}
+
+function saveRot() {
+  try { localStorage.setItem('nh_rot', ROTU ? '1' : '0'); } catch (e) {}
+}
+
+function buildControls() {
+  var pc, i, a, glyph = ['◀', '▶', '▲', '▼'];
+  pc = mkCtl('pad', '', null, 'pad');
+  pc.ar = [];
+  pc.ard = [false, false, false, false];
+  for (i = 0; i < 4; i++) {
+    a = document.createElement('div');
+    a.className = 'pa';
+    a.textContent = glyph[i];
+    pc.el.appendChild(a);
+    pc.ar.push(a);
+  }
+  mkCtl('z', '대시', 'KeyZ', 'btn');
+  mkCtl('x', '점프', 'KeyX', 'btn');
+  mkCtl('c', '공격', 'KeyC', 'btn');
+  mkCtl('v', '특수', 'KeyV', 'btn');
+  mkCtl('a', '전환', 'KeyA', 'btn');
+  mkCtl('f', '기가', 'KeyF', 'btn');
+  mkCtl('ok', '확인', 'Enter', 'btn');
+  mkCtl('bk', '뒤로', 'Backspace', 'btn');
+  mkCtl('info', '정보', 'Enter', 'btn');
+  mkCtl('menu', '메뉴', 'Escape', 'btn');
+  mkCtl('rot', '↻', null, 'act').fn = function () {
+    ROTU = !ROTU;
+    saveRot();
+    releaseAll();
+    resize();
+  };
+  mkCtl('fs', '⛶', null, 'act').fn = toggleFs;
+  mkCtl('mute', '♪', null, 'act').fn = function () {
+    muted = !muted;
+    saveOpt();
+    lastMute = null;
+  };
+}
+
+function ctlSet(c, x, y, w, h, v) {
+  var s = c.el.style;
+  if (v) {
+    c.x = x; c.y = y; c.w = w; c.h = h;
+    s.left = Math.round(x) + 'px';
+    s.top = Math.round(y) + 'px';
+    s.width = Math.round(w) + 'px';
+    s.height = Math.round(h) + 'px';
+    s.fontSize = Math.round(Math.min(w, h) * 0.25) + 'px';
+  }
+  if (c.vis !== v) { c.vis = v; s.display = v ? 'flex' : 'none'; }
+}
+
+function layPad(c, menu) {
+  var u = TU, cx = c.w / 2, cy = c.h / 2, d = menu ? u * 0.9 : u * 1.2, o = menu ? u * 0.85 : u * 0.72, i, s;
+  for (i = 0; i < 4; i++) {
+    s = c.ar[i].style;
+    if (!menu && i > 1) { s.display = 'none'; continue; }
+    s.display = 'flex';
+    s.width = s.height = Math.round(d) + 'px';
+    s.left = Math.round((i === 0 ? cx - o : i === 1 ? cx + o : cx) - d / 2) + 'px';
+    s.top = Math.round((i === 2 ? cy - o : i === 3 ? cy + o : cy) - d / 2) + 'px';
+    s.fontSize = Math.round(d * 0.4) + 'px';
+  }
+}
+
+function placeControls() {
+  var u = TU, sw = SWD, sh = SHT, st = INS[0], sr = INS[1], sb = INS[2], sl = INS[3], m = TMODE, pl = m === 'play', mn = m === 'menu', okm = m === 'ok';
+  var xr = sw - sr - Math.max(12, u * 0.25), xl = sl + Math.max(12, u * 0.25), yb = sh - sb - Math.max(12, u * 0.2), sz, i, n, x, y, ss, tot, row, gp = 6, show = TCH;
+  var shot = show && pl, nova = shot && ch && ch.nova, pad = show && (pl || (mn && state !== 'bossshow'));
+  var pw = pl ? u * 2.8 : u * 2.7, ph = pl ? u * 1.6 : u * 2.7;
+  ctlSet(TCT.pad, xl, yb - ph, pw, ph, pad);
+  if (pad) layPad(TCT.pad, mn);
+  ctlSet(TCT.c, xr - u * 1.2, yb - u * 0.15 - u * 1.2, u * 1.2, u * 1.2, shot);
+  ctlSet(TCT.x, xr - u * 1.32 - u, yb - u * 0.5 - u, u, u, shot);
+  ctlSet(TCT.z, xr - u * 2.44 - u, yb - u, u, u, shot);
+  ctlSet(TCT.v, xr - u * 0.25 - u * 0.74, yb - u * 1.5 - u * 0.74, u * 0.74, u * 0.74, shot);
+  ctlSet(TCT.a, xr - u * 1.4 - u * 0.74, yb - u * 1.65 - u * 0.74, u * 0.74, u * 0.74, shot);
+  ctlSet(TCT.f, xr - u * 2.55 - u * 0.74, yb - u * 1.3 - u * 0.74, u * 0.74, u * 0.74, nova);
+  ctlSet(TCT.ok, xr - u * 1.25, yb - u * 0.4 - u * 1.25, u * 1.25, u * 1.25, show && (mn || okm));
+  ctlSet(TCT.bk, xr - u * 1.45 - u, yb - u * 0.15 - u, u, u, show && mn && state !== 'title');
+  ss = Math.max(30, Math.min(40, Math.round(u * 0.55)));
+  row = [];
+  if (show && (LM === 'port' || ROT)) row.push(TCT.rot);
+  if (show && document.fullscreenEnabled) row.push(TCT.fs);
+  if (show) row.push(TCT.mute);
+  n = row.length;
+  if (show && pl) { row.push(TCT.info, TCT.menu); }
+  tot = row.length * ss + (row.length - 1) * gp;
+  if (!show || LM === 'off') {
+    for (i = 0; i < CTL.length; i++) if (CTL[i].id === 'rot' || CTL[i].id === 'fs' || CTL[i].id === 'mute' || CTL[i].id === 'info' || CTL[i].id === 'menu') ctlSet(CTL[i], 0, 0, 0, 0, false);
+    return;
+  }
+  ctlSet(TCT.rot, 0, 0, 0, 0, false);
+  ctlSet(TCT.fs, 0, 0, 0, 0, false);
+  ctlSet(TCT.mute, 0, 0, 0, 0, false);
+  ctlSet(TCT.info, 0, 0, 0, 0, false);
+  ctlSet(TCT.menu, 0, 0, 0, 0, false);
+  if (LM === 'port') {
+    y = st + 5;
+    x = sl + 8;
+    for (i = 0; i < n; i++) { ctlSet(row[i], x, y, ss, ss, true); row[i].el.style.fontSize = Math.round(ss * 0.4) + 'px'; x += ss + gp; }
+    x = sw - sr - 8 - ss;
+    for (i = row.length - 1; i >= n; i--) { ctlSet(row[i], x, y, ss, ss, true); row[i].el.style.fontSize = Math.round(ss * 0.34) + 'px'; x -= ss + gp; }
+  } else {
+    y = CT + 4;
+    x = CL + CWD / 2 - tot / 2;
+    for (i = 0; i < row.length; i++) { ctlSet(row[i], x, y, ss, ss, true); row[i].el.style.fontSize = Math.round(ss * (i < n ? 0.4 : 0.34)) + 'px'; x += ss + gp; }
+  }
+}
+
+function readIns() {
+  var cs, t0, r0, b0, l0;
+  if (!probeEl) {
+    probeEl = document.createElement('div');
+    probeEl.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+    document.body.appendChild(probeEl);
+  }
+  cs = getComputedStyle(probeEl);
+  t0 = parseFloat(cs.paddingTop) || 0;
+  r0 = parseFloat(cs.paddingRight) || 0;
+  b0 = parseFloat(cs.paddingBottom) || 0;
+  l0 = parseFloat(cs.paddingLeft) || 0;
+  if (ROT) { INS[0] = l0; INS[1] = t0; INS[2] = r0; INS[3] = b0; }
+  else { INS[0] = t0; INS[1] = r0; INS[2] = b0; INS[3] = l0; }
+}
+
+function layout() {
+  var iw = window.innerWidth, ih = window.innerHeight, sw, sh, st, sr, sb, sl, aw, ah, cw, s = cv.style;
+  ROT = TCH && ih > iw && ROTU;
+  sw = ROT ? ih : iw;
+  sh = ROT ? iw : ih;
+  SWD = sw;
+  SHT = sh;
+  readIns();
+  st = INS[0]; sr = INS[1]; sb = INS[2]; sl = INS[3];
+  stageEl.style.width = sw + 'px';
+  stageEl.style.height = sh + 'px';
+  stageEl.style.transform = ROT ? 'translateY(' + ih + 'px) rotate(-90deg)' : 'none';
+  aw = sw - sl - sr;
+  if (!TCH) {
+    LM = 'off';
+    cw = Math.min(sw, sh * 16 / 9);
+    CL = (sw - cw) / 2;
+    CHT = Math.round(cw * 9 / 16);
+    CT = Math.round((sh - CHT) / 2);
+  } else if (sw >= sh) {
+    LM = 'land';
+    ah = sh - st - sb;
+    cw = Math.min(aw, ah * 16 / 9);
+    CL = sl + (aw - cw) / 2;
+    CHT = Math.round(cw * 9 / 16);
+    CT = Math.round(st + (ah - CHT) / 2);
+    TU = Math.max(44, Math.min(80, Math.round(Math.min(CHT * 0.165, aw / 7))));
+  } else {
+    LM = 'port';
+    cw = sw;
+    CL = 0;
+    CHT = Math.round(cw * 9 / 16);
+    TU = Math.max(40, Math.min(84, Math.floor(sw / 6.9)));
+    CT = Math.round(st + 44 + Math.max(0, (sh - st - sb - 44 - TU * 3.6 - CHT) * 0.42));
+  }
+  CWD = Math.round(cw);
+  CL = Math.round(CL);
+  s.left = CL + 'px';
+  s.top = CT + 'px';
+  s.width = CWD + 'px';
+  s.height = CHT + 'px';
+  stageEl.className = LM === 'port' ? 'p' : '';
+  placeControls();
+}
+
+function touchVis() {
+  var m, k;
+  if (!TCH) return;
+  m = (state === 'play' || state === 'ready' || state === 'dying' || state === 'heart' || state === 'capsule') ? 'play' : (state === 'clear' || state === 'over' || state === 'ending') ? 'ok' : 'menu';
+  k = m + (ch && ch.nova ? 'n' : '') + (state === 'title' ? 't' : '') + (state === 'bossshow' ? 'b' : '');
+  if (k !== TKEY) {
+    TKEY = k;
+    TMODE = m;
+    releaseAll();
+    placeControls();
+  }
+  if (muted !== lastMute) {
+    lastMute = muted;
+    TCT.mute.el.classList.toggle('off', muted);
+  }
+  if (ROT !== TCT.rot.on) {
+    TCT.rot.on = ROT;
+    TCT.rot.el.classList.toggle('on', ROT);
+  }
+}
+
+function showTip(s) {
+  var d = document.createElement('div');
+  d.className = 'tip';
+  d.textContent = s;
+  d.style.top = (CT + CHT + 14) + 'px';
+  uiEl.appendChild(d);
+  setTimeout(function () { d.remove(); }, 4200);
+}
+
+function unlockAudio() {
+  var AX = window.AudioContext || window.webkitAudioContext;
+  if (!AC && AX) AC = new AX();
+  if (AC && AC.state === 'suspended') AC.resume();
+}
+
+function lostFocus() {
+  var k;
+  for (k in keys) keys[k] = false;
+  releaseAll();
+  if (state === 'play') pressed.Escape = true;
+}
+
+function initTouch() {
+  var coarse = window.matchMedia && (window.matchMedia('(any-pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && !window.matchMedia('(hover: hover)').matches));
+  stageEl = document.getElementById('stage');
+  uiEl = document.getElementById('ui');
+  TCH = !!coarse;
+  try { ROTU = localStorage.getItem('nh_rot') === '1'; } catch (e) {}
+  buildControls();
+  resize();
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () { setTimeout(resize, 250); });
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+  window.addEventListener('pointerdown', function (e) {
+    if (!TCH && e.pointerType === 'touch') { TCH = true; resize(); }
+  }, true);
+  window.addEventListener('blur', lostFocus);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) lostFocus(); });
+  document.addEventListener('touchend', unlockAudio, {passive: true});
+  document.addEventListener('click', unlockAudio);
+  document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+  stageEl.addEventListener('pointerdown', function (ev) {
+    var x, y;
+    unlockAudio();
+    ptrXY(ev);
+    x = (PX0 - CL) * W / CWD;
+    y = (PY0 - CT) * H / CHT;
+    if (tapAt(x, y, x < 0 || y < 0 || x > W || y > H)) ev.preventDefault();
+  });
+  if (TCH && LM === 'port') {
+    var seen = false;
+    try { seen = localStorage.getItem('nh_tip') === '1'; localStorage.setItem('nh_tip', '1'); } catch (e2) {}
+    if (!seen) showTip('↻ 버튼으로 화면을 가로로 돌릴 수 있어요');
+  }
 }
 
 var SURF = [], doors = [], tank = null, AR = null, CORR = null, FY = 230, SX = 40, SY = 210, EX = 0, EY = 230, LH = 270;
@@ -1195,7 +1597,7 @@ var MR = null, mdoors = [], TWR = [];
 function midRoom(fx, fy, w, h, roof) {
   var dl = [fx, fy - 56, 14, 56], dr = [fx + w - 14, fy - 56, 14, 56];
   MR = {x: fx, y: fy, w: w, h: h, lock: false, done: false, cleared: false, cp: false, tower: false, sx: fx + w / 2 - 10};
-  SOL.push([fx, fy, w, 120]);
+  SOL.push([fx, fy, w, roof === 'none' ? 16 : 120]);
   SOL.push([fx, fy - h, 14, h - 56, 1], [fx + w - 14, fy - h, 14, h - 56, 1]);
   if (roof === 'tall') SOL.push([fx, -600, w, fy - h + 600, 1]);
   SOL.push(dl, dr);
@@ -1252,7 +1654,7 @@ function L1() {
     if (i === 7) BL(1810, 576, 60, 24);
     BL(x, y, 230, 24);
     if (i % 2 === 1) BL(x + 70, y - 100, 70, 10);
-    if (i % 3 === 0 && i > 0) BL(x + 150, y - 60, 40, 10);
+    if (i % 3 === 0 && i > 0) BL(x + 10, y - 100, 40, 10);
     if (i === 6) midRoom(1370, 576, 440, 130, 'tall');
   }
   EX = bx + 7 * 190 + 50;
@@ -1404,7 +1806,7 @@ function L8() {
   midRoom(1820, 300, 440, 130, 'tall');
   BL(2260, 300, 70, 20);
   for (i = 0; i < 8; i++) BL(2400 + i * 170, 300, 100, 20);
-  for (i = 0; i < 4; i++) BL(3690 + i * 150, 300 + i * 40, 170, 24);
+  for (i = 0; i < 4; i++) BL(3690 + i * 150, 300 + i * 40, i === 2 ? 140 : 170, 24);
   EX = 4140;
 }
 
@@ -1602,17 +2004,17 @@ function placeAll(i) {
   if (ch && ch.type === 'shot' && ST.p >= 0 && !upg[ST.p]) {
     for (k = Math.floor(n * 0.3); k < n + Math.floor(n * 0.3); k++) {
       s = SURF[k % n];
-      zx = s.x + 16;
-      if (s.w >= 150 && s.y - 212 >= 0 && !hit(zx - 4, s.y - 212, 190, 206)) {
-        SOL.push([zx, s.y - 176, 16, 176], [zx + 60, s.y - 176, 16, 176], [zx + 76, s.y - 176, 100, 10]);
-        cap = {x: zx + 100, y: s.y - 176 - 36, w: 28, h: 36, got: false};
+      zx = s.x + 8;
+      if (RCH[k % n] && s.w >= 150 && s.y - 160 >= 0 && !hit(zx - 4, s.y - 160, 150, 154)) {
+        SOL.push([zx, s.y - 40, 36, 10], [zx + 44, s.y - 80, 36, 10], [zx + 88, s.y - 120, 50, 10]);
+        cap = {x: zx + 99, y: s.y - 120 - 36, w: 28, h: 36, got: false};
         break;
       }
     }
     if (!cap) {
       for (k = Math.floor(n * 0.35); k < n + Math.floor(n * 0.35); k++) {
         s = SURF[k % n];
-        if (s.w >= 60 && !hit(s.x + 16, s.y - 38, 28, 36)) {
+        if (RCH[k % n] && s.w >= 60 && !hit(s.x + 16, s.y - 38, 28, 36)) {
           cap = {x: s.x + 16, y: s.y - 36, w: 28, h: 36, got: false};
           break;
         }
@@ -1625,7 +2027,7 @@ function placeAll(i) {
     var GK = ({0: [0], 1: [1, 5], 3: [2, 7], 4: [6], 5: [3, 5], 6: [4], 8: [0, 1, 2, 3, 4, 5, 6, 7]})[ST.gm];
     gk = GK ? GK[Math.floor(rnd() * GK.length)] : undefined;
     zx = s.x + 20 + rnd() * Math.max(10, s.w - 100);
-    if (gk !== undefined && k % 2 === 0) {
+    if (gk !== undefined && k % 3 === 0) {
       if (gk === 0 || gk === 3) zones.push({x: zx, y: s.y - 40, w: 60, h: 40, k: gk});
       else if (gk === 1) zones.push({x: zx, y: s.y - 8, w: 24, h: 8, k: 1});
       else if (gk === 2) zones.push({x: zx, y: s.y - 50, w: 16, h: 50, k: 2, off: Math.floor(rnd() * 180)});
@@ -1638,7 +2040,7 @@ function placeAll(i) {
   placeEnemies(i);
 }
 
-var ENEMY_N = 30;
+var ENEMY_N = 20;
 
 function placeEnemies(i) {
   var n = SURF.length, cand = [], k, j, s, e, r, zx, tries, tp, placed, pr, lv;
@@ -1712,7 +2114,7 @@ function startStage(i) {
   cax = Math.max(0, Math.min(LW - W, AR.x - 10));
   cay = Math.max(0, Math.min(LH - H, EY - 230));
   rsp = false;
-  cam = csx; camY = csy; shake = 0; cpX = SX; cpY = SY; capT = 0; rdy = 0; pt = 0; stx = -999; items = [];
+  cam = csx; camY = csy; cla = 0; hurtFl = 0; shake = 0; cpX = SX; cpY = SY; capT = 0; rdy = 0; pt = 0; stx = -999; items = [];
   player.maxhp = ch.hp + 2 * htCount();
   player.hp = player.maxhp;
   for (var wi = 0; wi < 8; wi++) we[wi] = 16;
@@ -1726,7 +2128,7 @@ function startStage(i) {
 }
 
 function mkBoss() {
-  var d = BOS[stageIdx] || BOS[0], h = stageIdx === 8 ? 60 : 24 + stageIdx * 2;
+  var d = BOS[stageIdx] || BOS[0], h = stageIdx === 8 ? 52 : 20 + stageIdx * 2;
   return {x: AR.x + AR.w - d.w - 30, y: FY - d.h, w: d.w, h: d.h, hp: h, maxhp: h, vx: 0, vy: 0, t: 0, inv: 0, active: false, dead: false, sid: -1, id: stageIdx, mode: 0, on: true, fill: 0, pre: 0, vis: false};
 }
 
@@ -1973,6 +2375,7 @@ function checkItems() {
     flag.on = true;
     cpX = flag.x;
     cpY = flag.y - 24;
+    p.healQ = p.maxhp - p.hp;
     tone(600, 1200, 0.2, 'triangle', 0.08);
   }
   if (CORR && p.x > CORR.x + 60 && p.x < CORR.x + 230 && Math.abs(p.y + 20 - CORR.fy) < 12 && cpX < CORR.x + 60) {
@@ -2263,9 +2666,10 @@ function freezePlayer() {
 function hurtPlayer(d, sx) {
   var p = player;
   if (!p || p.inv > 0 || (boss && boss.dead)) return;
-  p.hp -= Math.max(1, d - BR) * (ch.defM || 1);
+  p.hp -= Math.max(1, d - BR + DIF - 1) * (ch.defM || 1);
+  hurtFl = 8;
   if (p.hp <= 0 && hasP(7) && !p.rv) { p.rv = true; p.hp = 1; flashT = 8; tone(500, 1500, 0.5, 'triangle', 0.14); burst(p.x + 6, p.y + 10, '#8ff', 24, 7); }
-  p.inv = 70;
+  p.inv = 90;
   p.hurt = 14;
   p.kb = (p.x < sx ? -1 : 1) * 1.4;
   p.vy = -2.5;
@@ -2328,6 +2732,14 @@ function updatePlayer() {
   var wasG = p.ground;
   p.wall = 0;
   if (!p.ground && dir !== 0 && p.hurt <= 0 && wallHit(p.x + dir, p.y + 2, p.w, p.h - 6)) p.wall = dir;
+  if (p.ground) p.cyo = 5;
+  else if (p.cyo > 0) p.cyo--;
+  if (p.wall) { p.wg = 6; p.wgd = p.wall; }
+  else if (p.wg > 0) p.wg--;
+  var wl = p.wall;
+  if (!wl && p.wg > 0 && !p.ground && p.hurt <= 0 && wallHit(p.x + p.wgd, p.y + 2, p.w, p.h - 6)) wl = p.wgd;
+  if (pressed.KeyX) p.jb = 6;
+  else if (p.jb > 0) p.jb--;
   if (p.wall) {
     p.dashT = 0; p.dj = false; p.aj = false; p.spin = 0;
     if (pressed.KeyZ && !p.wd) { p.wd = true; burst(p.x + 6, p.y + 12, '#7ff', 6, 3); tone(500, 900, 0.1, 'sawtooth', 0.07); }
@@ -2360,24 +2772,30 @@ function updatePlayer() {
     } else {
       p.dj = false;
       p.vx = dir * ch.speed * SPD;
+      if (dir !== p.ld) { p.ld = dir; p.mvT = 0; }
+      if (dir && p.ground) { if (p.mvT < 4) p.vx *= 0.5; p.mvT++; }
       if (ST && ST.i && p.ground) p.vx = p.pv + (p.vx - p.pv) * 0.1;
       if (dir) p.face = dir;
     }
   }
-  if (p.hurt <= 0 && pressed.KeyX) {
-    if (p.ground) {
+  if (p.hurt <= 0 && (pressed.KeyX || (p.jb > 0 && p.ground))) {
+    if (p.ground || p.cyo > 0) {
       p.vy = (p.slow ? -4.4 : -5.4) * (hasP(4) ? 1.08 : 1);
       p.ground = false;
+      p.cyo = 0;
+      p.jb = 0;
       if (p.dashT > 0) { p.dj = true; p.dashT = 0; p.ad = true; } else p.dj = false;
       dust(p, 3);
       tone(220, 440, 0.12, 'square', 0.06);
-    } else if (p.wall) {
+    } else if (wl) {
       var wdk = p.wd || keys.KeyZ;
       p.vy = wdk ? -6.5 : -5;
       p.kick = 9;
-      p.kvx = -p.wall * 2.2;
-      p.face = -p.wall;
+      p.kvx = -wl * 2.2;
+      p.face = -wl;
       p.wall = 0;
+      p.wg = 0;
+      p.jb = 0;
       p.dashT = 0;
       p.dj = false;
       p.aj = false;
@@ -2386,6 +2804,7 @@ function updatePlayer() {
       tone(wdk ? 400 : 300, wdk ? 900 : 700, 0.12, 'square', 0.07);
     } else if (ch.type === 'slash' && !p.aj) {
       p.aj = true;
+      p.jb = 0;
       p.vy = -5;
       p.dashT = 0;
       p.dj = false;
@@ -2483,7 +2902,7 @@ function updatePlayer() {
     if (ch.type === 'shot') {
       var n = 0;
       for (var i = 0; i < bullets.length; i++) if (!bullets[i].big && bullets[i].dmg === 1 + AD) n++;
-      if (p.dashT > 0) { fire(1); p.charge = 0; } else if (n < 3) fire(0);
+      if (n < 3) fire(0);
     } else if (p.cool <= 0) {
       if (!p.ground && p.aj) { p.spin = 0; swing(p, 3); }
       else swing(p, p.comboT > 0 ? (p.combo + 1) % 3 : 0);
@@ -2551,7 +2970,7 @@ function updateEnemies() {
       if (e.bst > 0) {
         if (e.sc >= 9 && td > 1) {
           e.sc = 0; e.bst--;
-          ebul.push({x: e.x + 7, y: e.y + 3, w: 5, h: 5, vx: (p.x - e.x) / td * 2.4, vy: (p.y - e.y) / td * 2.4});
+          ebul.push({x: e.x + 7, y: e.y + 3, w: 5, h: 5, dm: (e.lv || 0) >= 2 ? 2 : 1, vx: (p.x - e.x) / td * 2.2, vy: (p.y - e.y) / td * 2.2});
           tone(700, 400, 0.05, 'square', 0.04);
         }
       } else if (e.sc > ((e.lv || 0) >= 2 ? 110 : 150) && td < 240) { e.bst = (e.lv || 0) >= 2 ? 3 : 2; e.sc = 9; }
@@ -2561,7 +2980,7 @@ function updateEnemies() {
       e.cov = e.mt < 90;
       if (e.mt === 96 || (e.mt === 108 && (e.lv || 0) >= 2)) {
         var td4 = Math.max(1, Math.hypot(p.x - e.x, p.y - e.y));
-        if (td4 < 260) { ebul.push({x: e.x + 5, y: e.y + 3, w: 5, h: 5, vx: (p.x - e.x) / td4 * 2.4, vy: (p.y - e.y) / td4 * 2.4}); tone(700, 400, 0.05, 'square', 0.04); }
+        if (td4 < 260) { ebul.push({x: e.x + 5, y: e.y + 3, w: 5, h: 5, dm: (e.lv || 0) >= 2 ? 2 : 1, vx: (p.x - e.x) / td4 * 2.2, vy: (p.y - e.y) / td4 * 2.2}); tone(700, 400, 0.05, 'square', 0.04); }
       }
     } else if (e.type === 0) {
       var wd0 = p.x - e.x;
@@ -2590,7 +3009,7 @@ function updateEnemies() {
       if (e.sw <= 0 && e.sc > ((e.lv || 0) === 0 ? 200 : 120) && Math.abs(dx) < 220) {
         e.sc = 0;
         var dd = Math.max(1, Math.hypot(p.x - e.x, p.y - e.y));
-        ebul.push({x: e.x + 7, y: e.y + 5, w: 5, h: 5, vx: (p.x - e.x) / dd * 2, vy: (p.y - e.y) / dd * 2});
+        ebul.push({x: e.x + 7, y: e.y + 5, w: 5, h: 5, dm: (e.lv || 0) >= 2 ? 2 : 1, vx: (p.x - e.x) / dd * 1.9, vy: (p.y - e.y) / dd * 1.9});
       }
     }
     if (e.hp <= 0) {
@@ -2605,14 +3024,14 @@ function updateEnemies() {
       enemies.splice(i, 1);
       continue;
     }
-    if (rect(p, e)) hurtPlayer(2, e.x);
+    if (rect(p, e)) hurtPlayer(e.type === 3 || (e.lv || 0) >= 2 ? 2 : 1, e.x);
   }
   var b = boss;
   if (b && b.active && !b.dead) {
     b.t++;
     if (b.inv > 0) b.inv--;
     bossAI(b, p);
-    if (rect(p, b)) hurtPlayer(3, b.x);
+    if (rect(p, b)) hurtPlayer(2, b.x);
     if (b.hp <= 0) { b.dead = true; b.t = 0; ebul = []; enemies = []; shake = 30; tone(150, 20, 0.9, 'sawtooth', 0.15); burst(b.x + 14, b.y + 20, '#ff6', 40, 8); }
   }
 }
@@ -2671,9 +3090,10 @@ function updateBullets() {
     q.x += q.vx;
     q.y += q.vy;
     if (q.vy > 0 && (q.vx === 0 || q.g) && hit(q.x, q.y + q.h, q.w, 1)) { burst(q.x, q.y, '#cfefff', 4); ebul.splice(j, 1); continue; }
-    if (player && rect(q, player)) { hurtPlayer(2, q.x); ebul.splice(j, 1); continue; }
+    if (player && rect(q, player)) { hurtPlayer(q.dm || 2, q.x); ebul.splice(j, 1); continue; }
     if (q.x < cam - 20 || q.x > cam + W + 20 || q.y < camY - 40 || q.y > camY + H + 40) ebul.splice(j, 1);
   }
+  if (parts.length > 260) parts.splice(0, parts.length - 260);
   for (var k = parts.length - 1; k >= 0; k--) {
     var r = parts[k];
     r.x += r.vx; r.y += r.vy; r.l--;
@@ -2691,7 +3111,7 @@ function update() {
   if (flashT > 0) flashT--;
   bgm();
   if (shake > 0) shake--;
-  if (hs > 0 && state === 'play') { hs--; return; }
+  if (hs > 0 && state === 'play') { hs--; holdP = true; return; }
   if (state === 'title') {
     if (pressed.ArrowUp) tm = (tm + 2) % 3;
     if (pressed.ArrowDown) tm = (tm + 1) % 3;
@@ -2719,18 +3139,20 @@ function update() {
   }
   if (state === 'option') {
     if (rb >= 0) return;
-    if (pressed.ArrowUp) om = (om + 7) % 8;
-    if (pressed.ArrowDown) om = (om + 1) % 8;
+    if (pressed.ArrowUp) { om = (om + 8) % 9; if (TCH && om > 1 && om < 7) om = 1; }
+    if (pressed.ArrowDown) { om = (om + 1) % 9; if (TCH && om > 1 && om < 7) om = 7; }
     if (om === 0 && (pressed.ArrowLeft || pressed.ArrowRight)) {
       VOL = Math.max(0, Math.min(1, Math.round((VOL + (pressed.ArrowRight ? 0.1 : -0.1)) * 10) / 10));
       tone(600, 600, 0.08, 'square', 0.08);
       saveOpt();
     }
+    if (om === 7 && (pressed.ArrowLeft || pressed.ArrowRight)) { DIF = (DIF + (pressed.ArrowRight ? 1 : 2)) % 3; saveOpt(); tone(600, 600, 0.08, 'square', 0.08); }
     if (pressed.Enter) {
-      if (om === 1) { muted = !muted; saveOpt(); }
+      if (om === 7) { DIF = (DIF + 1) % 3; saveOpt(); tone(600, 600, 0.08, 'square', 0.08); }
+      else if (om === 1) { muted = !muted; saveOpt(); }
       else if (om >= 2 && om <= 5) rb = om - 2;
       else if (om === 6) { OVR = {}; buildKM(); saveOpt(); }
-      else if (om === 7) state = 'title';
+      else if (om === 8) state = 'title';
     }
     if (pressed.Backspace) state = 'title';
     return;
@@ -2808,7 +3230,7 @@ function update() {
     return;
   }
   if (state === 'pause') {
-    if (pressed.Escape) { state = 'play'; return; }
+    if (pressed.Escape || pressed.Backspace) { state = 'play'; return; }
     if (pressed.ArrowUp) pm = (pm + 5) % 6;
     if (pressed.ArrowDown) pm = (pm + 1) % 6;
     if (pm === 3 && (pressed.ArrowLeft || pressed.ArrowRight)) {
@@ -2852,7 +3274,7 @@ function update() {
     ct++;
     if (state === 'clear' && ct === 2) fanfare();
     if (pressed.Enter && ct > 40) {
-      if (state === 'over') lives = 2;
+      if (state === 'over') lives = 3;
       state = state === 'clear' && stageIdx === 8 ? 'ending' : 'stage';
       autoFin = true;
       ct = 0;
@@ -2873,7 +3295,8 @@ function update() {
       cam += (cax - cam) * 0.1;
       camY += (cay - camY) * 0.1;
     } else {
-      cam += (Math.max(0, Math.min(LW - W, player.x - 200)) - cam) * 0.2;
+      cla += (player.face * 34 - cla) * 0.04;
+      cam += (Math.max(0, Math.min(LW - W, player.x - 200 + cla)) - cam) * 0.2;
       camY += (Math.max(0, Math.min(LH - H, player.y - 150)) - camY) * 0.15;
     }
     if (player.hp <= 0) {
@@ -2906,7 +3329,7 @@ function drawHero(p, c, gh) {
   hy = Math.floor(p.y) - 4;
   hf = p.face;
   hg = !!gh;
-  var body = (p.charge >= T2 && t % 4 < 2) ? '#fff' : c.color, dk = c.dark, ac = c.acc;
+  var body = p.charge >= T2 ? (t % 4 < 2 ? '#fff' : '#ffe36b') : (p.charge >= T1 && t % 6 < 3) ? c.lite : c.color, dk = c.dark, ac = c.acc;
   var air = !p.ground, dash = p.dashT > 0 || p.nova > 0, adash = air && dash, lnd = p.land > 0, kk = p.kick > 0, dj = air && p.dj, wl = p.wall !== 0 && air && p.vy > 0, hurt = p.hurt > 0;
   var gdash = dash && !air && !hurt;
   if (p.hovering) { P(3, 24, 4, 2 + (t % 4 < 2 ? 3 : 0), '#ffd24a'); P(9, 24, 4, 2 + (t % 4 < 2 ? 3 : 0), '#ffd24a'); P(4, 24, 2, 2, '#fff'); P(10, 24, 2, 2, '#fff'); }
@@ -3163,7 +3586,7 @@ function drawSelect() {
       drawText('▼', cx + 124, 130, 10, '#ff0', 'center');
     }
   }
-  if (Math.floor(t / 30) % 2 === 0) drawText('← → 캐릭터   ↑ ↓ 아머   ENTER 시작', W / 2, 246, 12, '#fff', 'center');
+  if (Math.floor(t / 30) % 2 === 0) drawText(hint('← → 캐릭터   ↑ ↓ 아머   ENTER 시작', '캐릭터를 탭해 선택 · ▲▼ 아머 · 시작 버튼'), W / 2, 246, 12, '#fff', 'center');
   reg(W / 2 - 70, 232, 140, 22, function () { pressed.Enter = true; });
   reg(8, 8, 70, 26, function () { pressed.Backspace = true; });
   drawText('◀ 뒤로', 14, 26, 12, '#8cf');
@@ -3222,9 +3645,14 @@ function drawStatus() {
     if (have) (function (k) { reg(184, y - 12, 276, 16, function () { cw = k; tone(700, 900, 0.05, 'square', 0.05); }); })(i);
   }
   var kn = function (c2) { return codeName(OVR[c2] || c2); };
-  drawText('이동 ←→  대시 ' + kn('KeyZ') + '  점프 ' + kn('KeyX') + '  공격 ' + kn('KeyC') + '  특수무기 V  무기전환 ' + kn('KeyA') + (ch.nova ? '  기가어택 F' : ''), 184, 232, 9, '#99a');
-  drawText('벽에서 점프 = 벽차기' + (ch.type === 'shot' ? '   C 꾹 = 차지' : '   공중 2단 점프 후 C = 반월참') + (ch.hover ? '   점프 중 X 꾹 = 호버링' : ''), 184, 244, 9, '#99a');
-  drawText('↑↓ 무기 선택     ENTER / ESC 닫기', W / 2 + 20, 262, 9, '#889', 'center');
+  if (TCH) {
+    drawText('버튼  대시 · 점프 · 공격 · 특수무기 · 무기전환' + (ch.nova ? ' · 기가어택' : ''), 184, 232, 9, '#99a');
+    drawText('벽에서 점프 = 벽차기' + (ch.type === 'shot' ? '   공격 꾹 = 차지' : '   공중 2단 점프 후 공격 = 반월참') + (ch.hover ? '   점프 중 점프 꾹 = 호버링' : ''), 184, 244, 9, '#99a');
+  } else {
+    drawText('이동 ←→  대시 ' + kn('KeyZ') + '  점프 ' + kn('KeyX') + '  공격 ' + kn('KeyC') + '  특수무기 V  무기전환 ' + kn('KeyA') + (ch.nova ? '  기가어택 F' : ''), 184, 232, 9, '#99a');
+    drawText('벽에서 점프 = 벽차기' + (ch.type === 'shot' ? '   C 꾹 = 차지' : '   공중 2단 점프 후 C = 반월참') + (ch.hover ? '   점프 중 X 꾹 = 호버링' : ''), 184, 244, 9, '#99a');
+  }
+  drawText(hint('↑↓ 무기 선택     ENTER / ESC 닫기', '무기를 탭해 선택     ✕ 닫기'), W / 2 + 20, 257, 9, '#889', 'center');
 }
 
 function drawPause() {
@@ -3252,7 +3680,7 @@ function drawPause() {
       (function (k, yy) { reg(130, yy - 16, 220, 22, function () { if (pm === k) pressed.Enter = true; else pm = k; }); })(i, py);
     }
   }
-  drawText('↑↓ 선택   ENTER 확인   ESC 닫기', W / 2, 252, 10, '#889', 'center');
+  drawText(hint('↑↓ 선택   ENTER 확인   ESC 닫기', '항목을 탭하세요'), W / 2, 252, 10, '#889', 'center');
 }
 
 function drawConfirm() {
@@ -3298,7 +3726,7 @@ function drawEquip() {
   }
   reg(8, 8, 70, 26, function () { pressed.Backspace = true; });
   drawText('◀ 뒤로', 14, 26, 12, '#8cf');
-  drawText('↑↓ 선택   ENTER 장착/해제   BACKSPACE 뒤로', W / 2, 262, 10, '#889', 'center');
+  drawText(hint('↑↓ 선택   ENTER 장착/해제   BACKSPACE 뒤로', '파츠를 탭하면 장착/해제'), W / 2, 262, 10, '#889', 'center');
 }
 
 function drawBossShow() {
@@ -3484,6 +3912,20 @@ function drawGame() {
       drawTextO(BN[stageIdx] || 'BOSS', W / 2, 80, 18, '#ffe36b', 'center');
     }
   }
+  if (hurtFl > 0) {
+    ctx.fillStyle = 'rgba(255,40,40,' + hurtFl * 0.035 + ')';
+    ctx.fillRect(0, 0, W, H);
+    hurtFl--;
+  }
+  if (state === 'play' && player && player.hp > 0 && player.hp <= player.maxhp * 0.25) {
+    lowT = (lowT + 1) % 60;
+    ctx.fillStyle = 'rgba(255,0,0,' + (0.05 + 0.1 * Math.abs(Math.sin(lowT / 60 * Math.PI))) + ')';
+    ctx.fillRect(0, 0, W, 10);
+    ctx.fillRect(0, H - 10, W, 10);
+    ctx.fillRect(0, 0, 10, H);
+    ctx.fillRect(W - 10, 0, 10, H);
+    if (lowT === 0) tone(1100, 1100, 0.06, 'square', 0.05);
+  }
   if (flashT > 0) {
     ctx.fillStyle = 'rgba(255,255,255,' + Math.min(1, flashT / 8) + ')';
     ctx.fillRect(0, 0, W, H);
@@ -3495,6 +3937,7 @@ function drawGame() {
     ctx.fillRect(0, 0, W, lb);
     ctx.fillRect(0, H - lb, W, lb);
     if (rdy >= 60 && rdy < 120 && Math.floor(rdy / 6) % 2 === 0) drawTextO('READY', W / 2, 190, 26, '#fff', 'center');
+    if (!rsp && rdy >= 14 && rdy < 110) drawTextO(ST.n, W / 2, 130, 16, '#ffe36b', 'center');
   }
   if (capT > 0) {
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
@@ -3510,7 +3953,7 @@ function drawGame() {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, W, H);
     drawText(state === 'over' ? 'GAME OVER' : 'STAGE CLEAR!', W / 2, 130, 28, state === 'over' ? '#f55' : '#ff0', 'center');
-    drawText('ENTER: 스테이지 선택으로', W / 2, 160, 12, '#fff', 'center');
+    drawText(hint('ENTER: 스테이지 선택으로', '화면을 탭하면 스테이지 선택으로'), W / 2, 160, 12, '#fff', 'center');
   } else if (state === 'status') {
     drawStatus();
   } else if (state === 'pause') {
@@ -3519,17 +3962,6 @@ function drawGame() {
     drawConfirm();
   }
   if (state === 'clear' || state === 'over' || state === 'ending') reg(0, 0, W, H, function () { pressed.Enter = true; });
-}
-
-function touchVis() {
-  if (!TB) return;
-  var g = (state === 'play' || state === 'ready' || state === 'dying' || state === 'heart' || state === 'capsule' || state === 'status' || state === 'pause' || state === 'confirm') ? 1 : 0, f = ch && ch.nova ? 1 : 0, sh = ch && ch.type === 'shot' ? 1 : 0, k = g + '' + f + sh, c;
-  if (k === tvKey) return;
-  tvKey = k;
-  for (c in TB) {
-    if (['KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyA', 'KeyF'].indexOf(c) < 0) continue;
-    TB[c].style.display = (g && (c !== 'KeyF' || f) && ((c !== 'KeyV' && c !== 'KeyA') || sh)) ? 'flex' : 'none';
-  }
 }
 
 function draw() {
@@ -3549,16 +3981,24 @@ function draw() {
 
 var last = 0, acc = 0;
 function loop(ts) {
+  var ran = false;
+  requestAnimationFrame(loop);
   acc += Math.min(100, ts - last);
   last = ts;
   while (acc >= 16.67) {
+    holdP = false;
     update();
-    pressed = {};
-    released = {};
+    if (!holdP) {
+      pressed = {};
+      released = {};
+    }
     acc -= 16.67;
+    ran = true;
   }
-  draw();
-  requestAnimationFrame(loop);
+  if (ran || needDraw) {
+    needDraw = false;
+    draw();
+  }
 }
 
 window.addEventListener('keydown', function (e) {
@@ -3582,18 +4022,9 @@ window.addEventListener('keyup', function (e) {
   keys[kc] = false;
   released[kc] = true;
 });
-resize();
-window.addEventListener('resize', resize);
 loadOpt();
 loadParts();
-cv.addEventListener('pointerdown', function (ev) {
-  var AX = window.AudioContext || window.webkitAudioContext;
-  if (!AC && AX) AC = new AX();
-  if (AC && AC.state === 'suspended') AC.resume();
-  var r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) * W / r.width, y = (ev.clientY - r.top) * H / r.height;
-  if (tapAt(x, y)) ev.preventDefault();
-});
-if ('ontouchstart' in window) makeTouch();
+initTouch();
 requestAnimationFrame(loop);
 </script>
 </body>
